@@ -1,5 +1,5 @@
-# Use OpenJDK 17 Alpine image
-FROM openjdk:17-alpine
+# Use OpenJDK 17 slim image
+FROM openjdk:17-slim
 
 # Set working directory
 WORKDIR /app
@@ -7,7 +7,7 @@ WORKDIR /app
 # Copy the packaged jar into the container
 COPY target/*.jar app.jar
 
-# Expose the port your app runs on (adjust if needed)
+# Expose the port your app runs on
 EXPOSE 8080
 
 # Define the entrypoint
