@@ -1,10 +1,12 @@
-package tn.esprit.studentmanagement.controllers;
+package tn.esprit.studentmanagement;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
+
+import tn.esprit.studentmanagement.controllers.StudentController;
 import tn.esprit.studentmanagement.entities.Student;
 import tn.esprit.studentmanagement.services.IStudentService;
 
@@ -26,6 +28,7 @@ class StudentControllerTest {
 
     @Test
     void testGetAllStudents() throws Exception {
+        // Using constructor for testing (id, firstName, lastName)
         List<Student> students = Arrays.asList(
                 new Student(1L, "John", "Doe"),
                 new Student(2L, "Jane", "Smith")

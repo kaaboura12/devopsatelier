@@ -29,4 +29,10 @@ public class Student {
 
     @OneToMany(mappedBy = "student")
     private List<Enrollment> enrollments;
+
+    public Student(Long idStudent, String firstName, String lastName) {
+    this.idStudent = idStudent;
+    this.firstName = firstName;
+    this.lastName = lastName;
+}
 }
