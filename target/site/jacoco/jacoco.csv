@@ -1,0 +1,10 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+student-management,tn.esprit.studentmanagement.controllers,EnrollmentController,24,0,0,0,5,0,5,0,5,0
+student-management,tn.esprit.studentmanagement.controllers,DepartmentController,24,0,0,0,5,0,5,0,5,0
+student-management,tn.esprit.studentmanagement.controllers,StudentController,20,4,0,0,4,1,4,1,4,1
+student-management,tn.esprit.studentmanagement,StudentManagementApplication,5,3,0,0,2,1,1,1,1,1
+student-management,tn.esprit.studentmanagement.services,StudentService,26,0,0,0,5,0,5,0,5,0
+student-management,tn.esprit.studentmanagement.services,DepartmentService,25,0,0,0,6,0,5,0,5,0
+student-management,tn.esprit.studentmanagement.services,EnrollmentService,25,0,0,0,6,0,5,0,5,0
+student-management,tn.esprit.studentmanagement.entities,Student,0,12,0,0,0,5,0,1,0,1
+student-management,tn.esprit.studentmanagement.entities,Status,33,0,0,0,6,0,1,0,1,0

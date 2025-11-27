@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EnrollmentController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">student-management</a> &gt; <a href="index.source.html" class="el_package">tn.esprit.studentmanagement.controllers</a> &gt; <span class="el_source">EnrollmentController.java</span></div><h1>EnrollmentController.java</h1><pre class="source lang-java linenums">package tn.esprit.studentmanagement.controllers;
+
+import lombok.AllArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+import tn.esprit.studentmanagement.entities.Enrollment;
+import tn.esprit.studentmanagement.services.IEnrollment;
+
+import java.util.List;
+
+@RestController
+@RequestMapping(&quot;/Enrollment&quot;)
+@CrossOrigin(origins = &quot;http://localhost:4200&quot;)
+@AllArgsConstructor
+public class EnrollmentController {
+    IEnrollment enrollmentService;
+    @GetMapping(&quot;/getAllEnrollment&quot;)
+<span class="nc" id="L17">    public List&lt;Enrollment&gt; getAllEnrollment() { return enrollmentService.getAllEnrollments(); }</span>
+
+    @GetMapping(&quot;/getEnrollment/{id}&quot;)
+<span class="nc" id="L20">    public Enrollment getEnrollment(@PathVariable Long id) { return enrollmentService.getEnrollmentById(id); }</span>
+
+    @PostMapping(&quot;/createEnrollment&quot;)
+<span class="nc" id="L23">    public Enrollment createEnrollment(@RequestBody Enrollment enrollment) { return enrollmentService.saveEnrollment(enrollment); }</span>
+
+    @PutMapping(&quot;/updateEnrollment&quot;)
+    public Enrollment updateEnrollment(@RequestBody Enrollment enrollment) {
+<span class="nc" id="L27">        return enrollmentService.saveEnrollment(enrollment);</span>
+    }
+
+    @DeleteMapping(&quot;/deleteEnrollment/{id}&quot;)
+    public void deleteEnrollment(@PathVariable Long id) {
+<span class="nc" id="L32">        enrollmentService.deleteEnrollment(id); }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.10.202304240956</span></div></body></html>
