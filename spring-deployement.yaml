@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
         - name: spring-app
-          image: kaaboura20/devopsatelier:v10
+          image: kaaboura20/devopsatelier:v13
           ports:
             - containerPort: 8080
           envFrom:
