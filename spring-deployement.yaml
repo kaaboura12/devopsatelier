@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
         - name: spring-app
-          image: <dockerhub-user>/spring-app:1.0
+          image: kaaboura20/devopsatelier:v10
           ports:
             - containerPort: 8080
           envFrom:
