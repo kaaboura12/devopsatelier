@@ -43,10 +43,14 @@ spec:
           ports:
             - containerPort: 3306
           env:
-            - name: MYSQL_ROOT_PASSWORD
-              value: root123
-            - name: MYSQL_DATABASE
-              value: springdb
+            - name: MYSQL_ROOT_PASSWORD
+              value: root123   # Keep this for initialization, but Spring won't use it
+            - name: MYSQL_DATABASE
+              value: springdb
+            - name: MYSQL_USER         # User needed by Spring
+              value: spring
+            - name: MYSQL_PASSWORD     # Password needed by Spring
+              value: spring123
           volumeMounts:
             - name: mysql-storage
               mountPath: /var/lib/mysql
