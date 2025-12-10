@@ -4,6 +4,7 @@ metadata:
   name: spring-config
 data:
   SPRING_DATASOURCE_URL: jdbc:mysql://mysql-service:3306/springdb
+  SERVER_PORT: "8080"
 
 ---
 apiVersion: v1
