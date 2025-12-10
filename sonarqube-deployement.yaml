@@ -1,20 +1,7 @@
 apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: sonarqube-pv
-spec:
-  capacity:
-    storage: 2Gi
-  accessModes:
-    - ReadWriteOnce
-  hostPath:
-    path: "/data/sonarqube"
-
----
-apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: sonarqube-pvc
+  name: sonarqube-data-pvc
 spec:
   accessModes:
     - ReadWriteOnce
@@ -50,8 +37,6 @@ spec:
               mountPath: /opt/sonarqube/data
             - name: sonarqube-extensions
               mountPath: /opt/sonarqube/extensions
-            - name: sonarqube-logs
-              mountPath: /opt/sonarqube/logs
           resources:
             requests:
               memory: "1Gi"
@@ -62,10 +47,8 @@ spec:
       volumes:
         - name: sonarqube-data
           persistentVolumeClaim:
-            claimName: sonarqube-pvc
+            claimName: sonarqube-data-pvc
         - name: sonarqube-extensions
-          emptyDir: {}
-        - name: sonarqube-logs
           emptyDir: {}
 
 ---
