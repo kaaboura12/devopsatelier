@@ -29,8 +29,24 @@ metadata:
   name: mysql-init
 data:
   init.sql: |
+    CREATE USER IF NOT EXISTS 'spring'@'%' IDENTIFIED BY 'spring123';
     GRANT ALL PRIVILEGES ON springdb.* TO 'spring'@'%';
     FLUSH PRIVILEGES;
+  grant-privileges.sh: |
+    #!/bin/bash
+    set -e
+    echo "Waiting for MySQL to be ready..."
+    until mysqladmin ping -h localhost -uroot -proot123 --silent; do
+      sleep 2
+    done
+    echo "MySQL is ready. Granting privileges..."
+    mysql -uroot -proot123 <<EOF
+    CREATE USER IF NOT EXISTS 'spring'@'%' IDENTIFIED BY 'spring123';
+    GRANT ALL PRIVILEGES ON springdb.* TO 'spring'@'%';
+    FLUSH PRIVILEGES;
+    SELECT User, Host FROM mysql.user WHERE User='spring';
+    EOF
+    echo "Privileges granted successfully!"
 
 ---
 apiVersion: apps/v1
@@ -66,6 +82,17 @@ spec:
               mountPath: /var/lib/mysql
             - name: mysql-init
               mountPath: /docker-entrypoint-initdb.d
+            - name: mysql-scripts
+              mountPath: /scripts
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    chmod +x /scripts/grant-privileges.sh
+                    /scripts/grant-privileges.sh
       volumes:                            # <-- FIX: Corrected indentation of volumes
         - name: mysql-storage
           persistentVolumeClaim:
@@ -73,6 +100,10 @@ spec:
         - name: mysql-init
           configMap:
             name: mysql-init
+        - name: mysql-scripts
+          configMap:
+            name: mysql-init
+            defaultMode: 0755
 
 ---
 apiVersion: v1
