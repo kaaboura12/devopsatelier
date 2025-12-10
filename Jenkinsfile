@@ -6,14 +6,31 @@ pipeline {
         DOCKER_CREDENTIALS = credentials('dockerhub-creds')
         KUBE_NAMESPACE = "devops"
         KUBECONFIG = "${WORKSPACE}/.kube/config"
-        SONARQUBE_URL = "http://sonarqube-service.devops.svc.cluster.local:9000"
         SONARQUBE_TOKEN = credentials('sonar-token')
+        SONARQUBE_URL = "http://localhost:9000"
     }
 
     stages {
         stage('Checkout') {
             steps {
                 git url: 'https://github.com/kaaboura12/devopsatelier.git', branch: 'main'
+            }
+        }
+
+        stage('Build Application') {
+            steps {
+                sh 'mvn clean package -DskipTests=true'
+            }
+        }
+
+        stage('Docker Build & Push') {
+            steps {
+                script {
+                    def imageTag = "v${env.BUILD_NUMBER}"
+                    sh "docker build -t ${IMAGE_NAME}:${imageTag} ."
+                    sh "echo ${DOCKER_CREDENTIALS_PSW} | docker login -u ${DOCKER_CREDENTIALS_USR} --password-stdin"
+                    sh "docker push ${IMAGE_NAME}:${imageTag}"
+                }
             }
         }
 
@@ -54,21 +71,75 @@ pipeline {
                         kubectl wait --for=condition=ready pod -l app=sonarqube -n ${KUBE_NAMESPACE} --timeout=300s || true
                     """
                     
+                    echo "Waiting additional time for SonarQube to fully initialize..."
+                    sleep(time: 30, unit: 'SECONDS')
+                    
+                    echo "Setting up port-forward to check SonarQube status..."
+                    sh """
+                        kubectl port-forward -n ${KUBE_NAMESPACE} svc/sonarqube-service 9000:9000 > /tmp/sonar-check.log 2>&1 &
+                        echo \$! > /tmp/sonar-check.pid
+                        sleep 5
+                    """
+                    
                     echo "Waiting for SonarQube service to be UP..."
                     sh """
-                        until curl -s ${SONARQUBE_URL}/api/system/status | grep -q "UP"; do
+                        until curl -s http://localhost:9000/api/system/status | grep -q "UP"; do
                             echo "SonarQube not ready yet. Sleeping 5s..."
                             sleep 5
                         done
                         echo "SonarQube is ready!"
                     """
+                    
+                    // Clean up port-forward
+                    sh """
+                        if [ -f /tmp/sonar-check.pid ]; then
+                            kill \$(cat /tmp/sonar-check.pid) 2>/dev/null || true
+                            rm -f /tmp/sonar-check.pid
+                        fi
+                    """
                 }
             }
         }
 
-        stage('Build Application') {
+        stage('SonarQube Analysis') {
             steps {
-                sh 'mvn clean verify'
+                script {
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                        // Start port-forward in background
+                        sh """
+                            kubectl port-forward -n ${KUBE_NAMESPACE} svc/sonarqube-service 9000:9000 > /tmp/sonar-port-forward.log 2>&1 &
+                            echo \$! > /tmp/sonar-port-forward.pid
+                            sleep 5
+                        """
+                        
+                        try {
+                            // Wait until SonarQube is accessible via port-forward
+                            sh """
+                                until curl -s http://localhost:9000/api/system/status | grep -q "UP"; do
+                                    echo "SonarQube not ready yet. Sleeping 5s..."
+                                    sleep 5
+                                done
+                                echo "SonarQube is ready!"
+                            """
+                            
+                            // Run SonarQube analysis
+                            sh """
+                                mvn sonar:sonar \\
+                                    -Dsonar.projectKey=devopsatelier \\
+                                    -Dsonar.host.url=http://localhost:9000 \\
+                                    -Dsonar.login=$SONAR_TOKEN
+                            """
+                        } finally {
+                            // Kill port-forward
+                            sh """
+                                if [ -f /tmp/sonar-port-forward.pid ]; then
+                                    kill \$(cat /tmp/sonar-port-forward.pid) 2>/dev/null || true
+                                    rm -f /tmp/sonar-port-forward.pid
+                                fi
+                            """
+                        }
+                    }
+                }
             }
         }
 
@@ -90,41 +161,6 @@ pipeline {
                     } else {
                         echo "⚠️ JaCoCo report not found, skipping coverage check"
                     }
-                }
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    sh """
-                        mvn sonar:sonar \\
-                            -Dsonar.projectKey=devopsatelier \\
-                            -Dsonar.host.url=${SONARQUBE_URL} \\
-                            -Dsonar.login=\$SONAR_TOKEN
-                    """
-                }
-            }
-        }
-
-        stage('Verify SonarQube Analysis') {
-            steps {
-                script {
-                    echo "✅ Verifying SonarQube analysis was completed..."
-                    sh """
-                        curl -s -u \${SONARQUBE_TOKEN}: ${SONARQUBE_URL}/api/project_analyses/search?project=devopsatelier | grep -q "devopsatelier" && echo "✅ SonarQube analysis verified successfully!" || echo "⚠️ Analysis verification inconclusive"
-                    """
-                }
-            }
-        }
-
-        stage('Docker Build & Push') {
-            steps {
-                script {
-                    def imageTag = "v${env.BUILD_NUMBER}"
-                    sh "docker build -t ${IMAGE_NAME}:${imageTag} ."
-                    sh "echo ${DOCKER_CREDENTIALS_PSW} | docker login -u ${DOCKER_CREDENTIALS_USR} --password-stdin"
-                    sh "docker push ${IMAGE_NAME}:${imageTag}"
                 }
             }
         }
@@ -217,7 +253,6 @@ pipeline {
             sh """
                 echo "📋 Debugging information:"
                 kubectl get pods -n ${KUBE_NAMESPACE}
-                kubectl describe pod -l app=sonarqube -n ${KUBE_NAMESPACE} || true
                 kubectl describe pod -l app=mysql -n ${KUBE_NAMESPACE} || true
                 kubectl describe pod -l app=spring-app -n ${KUBE_NAMESPACE} || true
             """
