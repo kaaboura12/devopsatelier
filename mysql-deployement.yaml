@@ -23,6 +23,16 @@ spec:
       storage: 1Gi
 
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init
+data:
+  init.sql: |
+    GRANT ALL PRIVILEGES ON springdb.* TO 'spring'@'%';
+    FLUSH PRIVILEGES;
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -54,10 +64,15 @@ spec:
           volumeMounts:
             - name: mysql-storage
               mountPath: /var/lib/mysql
+            - name: mysql-init
+              mountPath: /docker-entrypoint-initdb.d
       volumes:                            # <-- FIX: Corrected indentation of volumes
         - name: mysql-storage
           persistentVolumeClaim:
             claimName: mysql-pvc
+        - name: mysql-init
+          configMap:
+            name: mysql-init
 
 ---
 apiVersion: v1
