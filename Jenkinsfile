@@ -4,10 +4,10 @@ pipeline {
     environment {
         IMAGE_NAME = "kaaboura20/devopsatelier"
         DOCKER_CREDENTIALS = credentials('dockerhub-creds')
-        SONARQUBE_TOKEN = credentials('sonar-token')
         KUBE_NAMESPACE = "devops"
         KUBECONFIG = "${WORKSPACE}/.kube/config"
-        SONARQUBE_URL = "http://sonarqube-service.${KUBE_NAMESPACE}.svc.cluster.local:9000"
+        SONARQUBE_URL = "http://sonarqube-service.devops.svc.cluster.local:9000"
+        SONARQUBE_TOKEN = credentials('sonar-token')
     }
 
     stages {
@@ -54,16 +54,13 @@ pipeline {
                         kubectl wait --for=condition=ready pod -l app=sonarqube -n ${KUBE_NAMESPACE} --timeout=300s || true
                     """
                     
-                    echo "Waiting for SonarQube to fully initialize (this may take 1-2 minutes)..."
-                    sleep(time: 90, unit: 'SECONDS')
-                    
-                    echo "Verifying SonarQube is accessible..."
+                    echo "Waiting for SonarQube service to be UP..."
                     sh """
-                        SONARQUBE_POD=\$(kubectl get pods -n ${KUBE_NAMESPACE} -l app=sonarqube -o jsonpath='{.items[0].metadata.name}')
-                        if [ -n "\$SONARQUBE_POD" ]; then
-                            # Check if SonarQube container is running
-                            kubectl get pod \$SONARQUBE_POD -n ${KUBE_NAMESPACE} -o jsonpath='{.status.containerStatuses[0].ready}' | grep -q "true" && echo "✅ SonarQube pod is ready!" || echo "⚠️ SonarQube pod may still be initializing"
-                        fi
+                        until curl -s ${SONARQUBE_URL}/api/system/status | grep -q "UP"; do
+                            echo "SonarQube not ready yet. Sleeping 5s..."
+                            sleep 5
+                        done
+                        echo "SonarQube is ready!"
                     """
                 }
             }
@@ -71,20 +68,7 @@ pipeline {
 
         stage('Build Application') {
             steps {
-                sh 'mvn clean package'
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    sh """
-                        mvn sonar:sonar \
-                            -Dsonar.projectKey=devopsatelier \
-                            -Dsonar.host.url=${SONARQUBE_URL} \
-                            -Dsonar.login=$SONAR_TOKEN
-                    """
-                }
+                sh 'mvn clean verify'
             }
         }
 
@@ -110,24 +94,26 @@ pipeline {
             }
         }
 
+        stage('SonarQube Analysis') {
+            steps {
+                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                    sh """
+                        mvn sonar:sonar \\
+                            -Dsonar.projectKey=devopsatelier \\
+                            -Dsonar.host.url=${SONARQUBE_URL} \\
+                            -Dsonar.login=\$SONAR_TOKEN
+                    """
+                }
+            }
+        }
+
         stage('Verify SonarQube Analysis') {
             steps {
                 script {
-                    echo "Verifying that SonarQube analysis was performed..."
-                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                        sh """
-                            SONARQUBE_POD=\$(kubectl get pods -n ${KUBE_NAMESPACE} -l app=sonarqube -o jsonpath='{.items[0].metadata.name}')
-                            if [ -n "\$SONARQUBE_POD" ]; then
-                                echo "Checking SonarQube projects..."
-                                RESULT=\$(kubectl exec -n ${KUBE_NAMESPACE} \$SONARQUBE_POD -- curl -s -u \$SONAR_TOKEN: ${SONARQUBE_URL}/api/projects/search 2>/dev/null || echo "")
-                                if echo "\$RESULT" | grep -q "devopsatelier"; then
-                                    echo "✅ SonarQube analysis verified - project 'devopsatelier' found!"
-                                else
-                                    echo "⚠️ Could not verify project in SonarQube (this is not a failure)"
-                                fi
-                            fi
-                        """
-                    }
+                    echo "✅ Verifying SonarQube analysis was completed..."
+                    sh """
+                        curl -s -u \${SONARQUBE_TOKEN}: ${SONARQUBE_URL}/api/project_analyses/search?project=devopsatelier | grep -q "devopsatelier" && echo "✅ SonarQube analysis verified successfully!" || echo "⚠️ Analysis verification inconclusive"
+                    """
                 }
             }
         }
@@ -231,9 +217,9 @@ pipeline {
             sh """
                 echo "📋 Debugging information:"
                 kubectl get pods -n ${KUBE_NAMESPACE}
+                kubectl describe pod -l app=sonarqube -n ${KUBE_NAMESPACE} || true
                 kubectl describe pod -l app=mysql -n ${KUBE_NAMESPACE} || true
                 kubectl describe pod -l app=spring-app -n ${KUBE_NAMESPACE} || true
-                kubectl describe pod -l app=sonarqube -n ${KUBE_NAMESPACE} || true
             """
         }
     }
