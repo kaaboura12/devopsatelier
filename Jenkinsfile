@@ -6,6 +6,7 @@ pipeline {
         DOCKER_CREDENTIALS = credentials('dockerhub-creds')
         KUBE_NAMESPACE = "devops"
         KUBECONFIG = "${WORKSPACE}/.kube/config"
+        SONARQUBE_URL = "http://sonarqube-service.devops.svc.cluster.local:9000"
     }
 
     stages {
@@ -18,6 +19,50 @@ pipeline {
         stage('Build Application') {
             steps {
                 sh 'mvn clean package -DskipTests=true'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                    script {
+                        echo "Running SonarQube analysis..."
+                        sh """
+                            mvn sonar:sonar \
+                                -Dsonar.projectKey=devopsatelier \
+                                -Dsonar.host.url=${SONARQUBE_URL} \
+                                -Dsonar.login=$SONAR_TOKEN \
+                                -Dsonar.java.binaries=target/classes
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Verify SonarQube Analysis') {
+            steps {
+                script {
+                    echo "Verifying SonarQube analysis was completed..."
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                        sh """
+                            SONARQUBE_POD=\$(kubectl get pods -n ${KUBE_NAMESPACE} -l app=sonarqube -o jsonpath='{.items[0].metadata.name}')
+                            if [ -n "\$SONARQUBE_POD" ]; then
+                                echo "Checking analysis results..."
+                                ANALYSIS_STATUS=\$(kubectl exec -n ${KUBE_NAMESPACE} \$SONARQUBE_POD -- curl -s -u $SONAR_TOKEN: http://localhost:9000/api/ce/activity?component=devopsatelier | grep -o '"status":"[^"]*"' | head -1 || echo "No analysis found")
+                                echo "Analysis Status: \$ANALYSIS_STATUS"
+                                
+                                # Get project info
+                                PROJECT_INFO=\$(kubectl exec -n ${KUBE_NAMESPACE} \$SONARQUBE_POD -- curl -s -u $SONAR_TOKEN: http://localhost:9000/api/projects/search?projects=devopsatelier)
+                                echo "Project Information:"
+                                echo "\$PROJECT_INFO"
+                                
+                                echo "✅ SonarQube analysis verification completed!"
+                            else
+                                echo "⚠️ SonarQube pod not found"
+                            fi
+                        """
+                    }
+                }
             }
         }
 
@@ -50,6 +95,41 @@ pipeline {
         stage('Verify Kubernetes Connectivity') {
             steps {
                 sh 'kubectl get nodes'
+            }
+        }
+
+        stage('Deploy SonarQube to Kubernetes') {
+            steps {
+                sh """
+                    kubectl apply --validate=false -f sonarqube-deployement.yaml -n ${KUBE_NAMESPACE}
+                """
+            }
+        }
+
+        stage('Wait for SonarQube to be Ready') {
+            steps {
+                script {
+                    echo "Waiting for SonarQube pod to be ready..."
+                    sh """
+                        kubectl wait --for=condition=ready pod -l app=sonarqube -n ${KUBE_NAMESPACE} --timeout=600s || true
+                    """
+                    
+                    echo "Waiting for SonarQube service to be available..."
+                    sh """
+                        echo "Checking SonarQube API status..."
+                        SONARQUBE_POD=\$(kubectl get pods -n ${KUBE_NAMESPACE} -l app=sonarqube -o jsonpath='{.items[0].metadata.name}')
+                        if [ -n "\$SONARQUBE_POD" ]; then
+                            for i in {1..60}; do
+                                if kubectl exec -n ${KUBE_NAMESPACE} \$SONARQUBE_POD -- curl -s http://localhost:9000/api/system/status | grep -q '"status":"UP"'; then
+                                    echo "✅ SonarQube is UP and ready!"
+                                    break
+                                fi
+                                echo "SonarQube not ready yet. Waiting... (\$i/60)"
+                                sleep 10
+                            done
+                        fi
+                    """
+                }
             }
         }
 
