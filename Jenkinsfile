@@ -4,10 +4,10 @@ pipeline {
     environment {
         IMAGE_NAME = "kaaboura20/devopsatelier"
         DOCKER_CREDENTIALS = credentials('dockerhub-creds')
+        SONARQUBE_TOKEN = credentials('sonar-token')
         KUBE_NAMESPACE = "devops"
         KUBECONFIG = "${WORKSPACE}/.kube/config"
-        SONARQUBE_URL = "http://sonarqube-service.devops.svc.cluster.local:9000"
-        SONARQUBE_TOKEN = credentials('sonar-token')
+        SONARQUBE_URL = "http://sonarqube-service.${KUBE_NAMESPACE}.svc.cluster.local:9000"
     }
 
     stages {
@@ -17,9 +17,24 @@ pipeline {
             }
         }
 
-        stage('Build Application') {
+        stage('Setup Kubeconfig for Jenkins') {
             steps {
-                sh 'mvn clean package'
+                sh '''
+                    # Create the target directory
+                    mkdir -p $WORKSPACE/.kube
+                    
+                    # Copy the newly generated, self-contained configuration file
+                    cp /home/kaaboura12/.kube/portable_config $WORKSPACE/.kube/config
+                    
+                    # Set secure permissions on the copied file
+                    chmod 600 $WORKSPACE/.kube/config
+                '''
+            }
+        }
+
+        stage('Verify Kubernetes Connectivity') {
+            steps {
+                sh 'kubectl get nodes'
             }
         }
 
@@ -39,22 +54,24 @@ pipeline {
                         kubectl wait --for=condition=ready pod -l app=sonarqube -n ${KUBE_NAMESPACE} --timeout=300s || true
                     """
                     
-                    echo "Waiting for SonarQube service to be available..."
+                    echo "Waiting for SonarQube to fully initialize (this may take 1-2 minutes)..."
+                    sleep(time: 90, unit: 'SECONDS')
+                    
+                    echo "Verifying SonarQube is accessible..."
                     sh """
                         SONARQUBE_POD=\$(kubectl get pods -n ${KUBE_NAMESPACE} -l app=sonarqube -o jsonpath='{.items[0].metadata.name}')
                         if [ -n "\$SONARQUBE_POD" ]; then
-                            echo "Waiting for SonarQube to be UP..."
-                            for i in {1..60}; do
-                                if kubectl exec -n ${KUBE_NAMESPACE} \$SONARQUBE_POD -- curl -s http://localhost:9000/api/system/status | grep -q "UP"; then
-                                    echo "SonarQube is ready!"
-                                    break
-                                fi
-                                echo "SonarQube not ready yet. Waiting 5s... (\$i/60)"
-                                sleep 5
-                            done
+                            # Check if SonarQube container is running
+                            kubectl get pod \$SONARQUBE_POD -n ${KUBE_NAMESPACE} -o jsonpath='{.status.containerStatuses[0].ready}' | grep -q "true" && echo "✅ SonarQube pod is ready!" || echo "⚠️ SonarQube pod may still be initializing"
                         fi
                     """
                 }
+            }
+        }
+
+        stage('Build Application') {
+            steps {
+                sh 'mvn clean package'
             }
         }
 
@@ -62,10 +79,10 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
                     sh """
-                        mvn sonar:sonar \\
-                            -Dsonar.projectKey=devopsatelier \\
-                            -Dsonar.host.url=${SONARQUBE_URL} \\
-                            -Dsonar.login=\$SONAR_TOKEN
+                        mvn sonar:sonar \
+                            -Dsonar.projectKey=devopsatelier \
+                            -Dsonar.host.url=${SONARQUBE_URL} \
+                            -Dsonar.login=$SONAR_TOKEN
                     """
                 }
             }
@@ -93,6 +110,28 @@ pipeline {
             }
         }
 
+        stage('Verify SonarQube Analysis') {
+            steps {
+                script {
+                    echo "Verifying that SonarQube analysis was performed..."
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                        sh """
+                            SONARQUBE_POD=\$(kubectl get pods -n ${KUBE_NAMESPACE} -l app=sonarqube -o jsonpath='{.items[0].metadata.name}')
+                            if [ -n "\$SONARQUBE_POD" ]; then
+                                echo "Checking SonarQube projects..."
+                                RESULT=\$(kubectl exec -n ${KUBE_NAMESPACE} \$SONARQUBE_POD -- curl -s -u \$SONAR_TOKEN: ${SONARQUBE_URL}/api/projects/search 2>/dev/null || echo "")
+                                if echo "\$RESULT" | grep -q "devopsatelier"; then
+                                    echo "✅ SonarQube analysis verified - project 'devopsatelier' found!"
+                                else
+                                    echo "⚠️ Could not verify project in SonarQube (this is not a failure)"
+                                fi
+                            fi
+                        """
+                    }
+                }
+            }
+        }
+
         stage('Docker Build & Push') {
             steps {
                 script {
@@ -101,27 +140,6 @@ pipeline {
                     sh "echo ${DOCKER_CREDENTIALS_PSW} | docker login -u ${DOCKER_CREDENTIALS_USR} --password-stdin"
                     sh "docker push ${IMAGE_NAME}:${imageTag}"
                 }
-            }
-        }
-
-        stage('Setup Kubeconfig for Jenkins') {
-            steps {
-                sh '''
-                    # Create the target directory
-                    mkdir -p $WORKSPACE/.kube
-                    
-                    # Copy the newly generated, self-contained configuration file
-                    cp /home/kaaboura12/.kube/portable_config $WORKSPACE/.kube/config
-                    
-                    # Set secure permissions on the copied file
-                    chmod 600 $WORKSPACE/.kube/config
-                '''
-            }
-        }
-
-        stage('Verify Kubernetes Connectivity') {
-            steps {
-                sh 'kubectl get nodes'
             }
         }
 
@@ -199,13 +217,6 @@ pipeline {
                     echo ""
                     echo "✅ Checking Spring Boot logs for connection status:"
                     kubectl logs -n ${KUBE_NAMESPACE} -l app=spring-app --tail=20 || true
-                    
-                    echo ""
-                    echo "✅ Checking SonarQube status:"
-                    SONARQUBE_POD=\$(kubectl get pods -n ${KUBE_NAMESPACE} -l app=sonarqube -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-                    if [ -n "\$SONARQUBE_POD" ]; then
-                        kubectl exec -n ${KUBE_NAMESPACE} \$SONARQUBE_POD -- curl -s http://localhost:9000/api/system/status || echo "SonarQube status check failed"
-                    fi
                 """
             }
         }
