@@ -3,6 +3,7 @@ pipeline {
 
     environment {
         IMAGE_NAME = "kaaboura20/devopsatelier"
+        FRONTEND_IMAGE_NAME = "kaaboura20/devopsatelier-frontend"
         DOCKER_CREDENTIALS = credentials('dockerhub-creds')
         KUBE_NAMESPACE = "devops"
         KUBECONFIG = "${WORKSPACE}/.kube/config"
@@ -226,6 +227,63 @@ pipeline {
             }
         }
 
+        stage('Build Frontend Docker Image') {
+            steps {
+                script {
+                    def imageTag = "v${env.BUILD_NUMBER}"
+                    sh """
+                        cd frontend
+                        docker build -t ${FRONTEND_IMAGE_NAME}:${imageTag} .
+                        docker tag ${FRONTEND_IMAGE_NAME}:${imageTag} ${FRONTEND_IMAGE_NAME}:latest
+                    """
+                }
+            }
+        }
+
+        stage('Push Frontend Docker Image') {
+            steps {
+                script {
+                    def imageTag = "v${env.BUILD_NUMBER}"
+                    sh """
+                        echo ${DOCKER_CREDENTIALS_PSW} | docker login -u ${DOCKER_CREDENTIALS_USR} --password-stdin
+                        docker push ${FRONTEND_IMAGE_NAME}:${imageTag}
+                        docker push ${FRONTEND_IMAGE_NAME}:latest
+                    """
+                }
+            }
+        }
+
+        stage('Update Frontend Deployment Image') {
+            steps {
+                script {
+                    def imageTag = "v${env.BUILD_NUMBER}"
+                    sh """
+                        # Update the image tag in frontend-deployment.yaml
+                        sed -i 's|image: ${FRONTEND_IMAGE_NAME}:.*|image: ${FRONTEND_IMAGE_NAME}:${imageTag}|g' frontend-deployment.yaml
+                    """
+                }
+            }
+        }
+
+        stage('Deploy Frontend to Kubernetes') {
+            steps {
+                sh """
+                    kubectl apply --validate=false -f frontend-deployment.yaml -n ${KUBE_NAMESPACE}
+                """
+            }
+        }
+
+        stage('Wait for Frontend to be Ready') {
+            steps {
+                script {
+                    echo "Waiting for Frontend pods to be ready..."
+                    sh """
+                        kubectl wait --for=condition=ready pod -l app=frontend-app -n ${KUBE_NAMESPACE} --timeout=300s || true
+                    """
+                }
+            }
+        }
+
         stage('Verify Deployment') {
             steps {
                 sh """
@@ -239,6 +297,10 @@ pipeline {
                     echo ""
                     echo "✅ Checking Spring Boot logs for connection status:"
                     kubectl logs -n ${KUBE_NAMESPACE} -l app=spring-app --tail=20 || true
+                    
+                    echo ""
+                    echo "✅ Frontend service is available at NodePort 30090"
+                    echo "✅ Spring Boot API is available at NodePort 30080"
                 """
             }
         }
@@ -255,6 +317,7 @@ pipeline {
                 kubectl get pods -n ${KUBE_NAMESPACE}
                 kubectl describe pod -l app=mysql -n ${KUBE_NAMESPACE} || true
                 kubectl describe pod -l app=spring-app -n ${KUBE_NAMESPACE} || true
+                kubectl describe pod -l app=frontend-app -n ${KUBE_NAMESPACE} || true
             """
         }
     }
