@@ -3,6 +3,7 @@ tn/esprit/studentmanagement/entities/Enrollment.class
 tn/esprit/studentmanagement/repositories/StudentRepository.class
 tn/esprit/studentmanagement/controllers/StudentController.class
 tn/esprit/studentmanagement/services/IEnrollment.class
+App.class
 tn/esprit/studentmanagement/controllers/EnrollmentController.class
 tn/esprit/studentmanagement/services/EnrollmentService.class
 tn/esprit/studentmanagement/repositories/EnrollmentRepository.class

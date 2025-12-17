@@ -1,4 +1,5 @@
 GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+student-management,default,App,0,14,0,0,0,5,0,3,0,3
 student-management,tn.esprit.studentmanagement.controllers,EnrollmentController,24,0,0,0,5,0,5,0,5,0
 student-management,tn.esprit.studentmanagement.controllers,DepartmentController,24,0,0,0,5,0,5,0,5,0
 student-management,tn.esprit.studentmanagement.controllers,StudentController,20,4,0,0,4,1,4,1,4,1

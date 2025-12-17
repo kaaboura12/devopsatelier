@@ -30,6 +30,10 @@ spec:
     metadata:
       labels:
         app: spring-app
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
     spec:
       containers:
         - name: spring-app
