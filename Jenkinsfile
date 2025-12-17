@@ -215,72 +215,6 @@ pipeline {
             }
         }
 
-        stage('Deploy Prometheus and Grafana') {
-            steps {
-                script {
-                    // Get the Kubernetes node IP to configure Jenkins endpoint
-                    def nodeIP = sh(
-                        script: "kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type==\"InternalIP\")].address}'",
-                        returnStdout: true
-                    ).trim()
-                    
-                    echo "Kubernetes Node IP: ${nodeIP}"
-                    
-                    // Update jenkins-service.yaml with the actual node IP
-                    sh """
-                        # Create jenkins-service.yaml with node IP
-                        cat > jenkins-service.yaml <<EOF
-apiVersion: v1
-kind: Service
-metadata:
-  name: jenkins-service
-  namespace: ${KUBE_NAMESPACE}
-  labels:
-    app: jenkins
-spec:
-  type: ClusterIP
-  ports:
-    - port: 8080
-      targetPort: 8080
-      protocol: TCP
-      name: http
-
----
-apiVersion: v1
-kind: Endpoints
-metadata:
-  name: jenkins-service
-  namespace: ${KUBE_NAMESPACE}
-subsets:
-  - addresses:
-      - ip: "${nodeIP}"
-    ports:
-      - port: 8080
-        name: http
-EOF
-                    """
-                    
-                    sh """
-                        echo "Deploying Jenkins Service..."
-                        kubectl apply -f jenkins-service.yaml -n ${KUBE_NAMESPACE}
-                        
-                        echo "Deploying Prometheus..."
-                        kubectl apply -f prometheus-deployment.yaml -n ${KUBE_NAMESPACE}
-                        
-                        echo "Deploying Grafana..."
-                        kubectl apply -f grafana-deployment.yaml -n ${KUBE_NAMESPACE}
-                        
-                        echo "Deploying Node Exporter..."
-                        kubectl apply -f node-exporter-deployment.yaml -n ${KUBE_NAMESPACE}
-                        
-                        echo "Waiting for monitoring stack to be ready..."
-                        kubectl wait --for=condition=ready pod -l app=prometheus -n ${KUBE_NAMESPACE} --timeout=300s || true
-                        kubectl wait --for=condition=ready pod -l app=grafana -n ${KUBE_NAMESPACE} --timeout=300s || true
-                    """
-                }
-            }
-        }
-
         stage('Wait for Spring Boot to be Ready') {
             steps {
                 script {
@@ -289,6 +223,14 @@ EOF
                         kubectl wait --for=condition=ready pod -l app=spring-app -n ${KUBE_NAMESPACE} --timeout=300s || true
                     """
                 }
+            }
+        }
+
+        stage('Deploy ServiceMonitor for Prometheus') {
+            steps {
+                sh """
+                    kubectl apply --validate=false -f servicemonitor.yaml -n ${KUBE_NAMESPACE}
+                """
             }
         }
 
@@ -325,3 +267,4 @@ EOF
         }
     }
 }
+

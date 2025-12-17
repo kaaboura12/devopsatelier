@@ -30,10 +30,6 @@ spec:
     metadata:
       labels:
         app: spring-app
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
-        prometheus.io/path: "/actuator/prometheus"
     spec:
       containers:
         - name: spring-app
@@ -50,12 +46,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: spring-service
+  name: spring-app
+  namespace: devops
 spec:
   selector:
     app: spring-app
   ports:
-    - port: 8080
+    - protocol: TCP
+      port: 8080
       targetPort: 8080
-      nodePort: 30080
-  type: NodePort

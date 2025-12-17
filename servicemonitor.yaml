@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: spring-app-monitor
+  namespace: devops
+spec:
+  selector:
+    matchLabels:
+      app: spring-app
+  namespaceSelector:
+    matchNames:
+      - devops
+  endpoints:
+    - port: 8080
+      path: /actuator/prometheus
+
